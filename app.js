@@ -27,7 +27,7 @@ function normalise(d) {
   d.settings = Object.assign({ iosTimer: false }, d.settings || {});
   return d;
 }
-S = normalise(S) || seed();
+S = normalise(S) || normalise(seed());
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
