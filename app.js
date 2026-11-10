@@ -17,7 +17,16 @@ function seed() {
 
 let S = null;
 try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
-if (!S || !Array.isArray(S.routines)) S = seed();
+function normalise(d) {
+  if (!d || !Array.isArray(d.routines)) return null;
+  d.history = Array.isArray(d.history) ? d.history : [];
+  d.stats = d.stats && typeof d.stats === 'object' ? d.stats : {};
+  d.routines.forEach(r => { r.id = r.id || uid(); r.name = r.name || 'Routine'; r.exercises = Array.isArray(r.exercises) ? r.exercises : []; r.exercises.forEach(e => { e.id = e.id || uid(); e.name = e.name || 'Exercise'; e.sets = +e.sets || 3; e.repMin = +e.repMin || 8; e.repMax = Math.max(e.repMin, +e.repMax || e.repMin); e.rest = +e.rest || 120; e.bw = !!e.bw; }); });
+  if (d.active && (!Array.isArray(d.active.exs) || !Array.isArray(d.active.order) || !d.active.exs[d.active.order[d.active.pos]])) d.active = null;
+  if (d.lastSummary === undefined) d.lastSummary = null;
+  return d;
+}
+S = normalise(S) || seed();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
@@ -33,6 +42,7 @@ const dayKey = ts => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.
 const routine = id => S.routines.find(r => r.id === id);
 const lastDone = rid => { const h = S.history.find(e => e.rid === rid); return h ? h.end : null; };
 const repTxt = (r, min, max) => r < min ? '<' + min : r > max ? '>' + max : String(r);
+const rng = e => e.repMin === e.repMax ? String(e.repMin) : e.repMin + '–' + e.repMax;
 const wTxt = (w, bw) => bw ? (w ? 'BW+' + w : 'BW') : String(w);
 const flagOf = (sets, min, max) => sets.some(s => s.r < min) ? 'down' : sets.some(s => s.r > max) ? 'up' : null;
 const TAG = { up: '<span class="tag up">↑ Try more weight</span>', down: '<span class="tag down">↓ Try less weight</span>' };
@@ -73,7 +83,8 @@ function vHome() {
   const top = `<div class="top"><span class="brand">Gym Bro</span><div class="icons"><button class="icon" aria-label="History" data-a="go" data-to="history">${ICON.clock}</button><button class="icon" aria-label="Menu" data-a="go" data-to="menu">${ICON.dots}</button></div></div>`;
   if (!n) return top + head('Next up', 'No routines') + `<div class="content"><p class="empty">Add a routine to get started.</p></div>` + pill('+ New routine', 'newRoutine');
   const ld = lastDone(n.id);
-  const since = ld == null ? '–' : Math.round((dayKey(Date.now()) - dayKey(ld)) / 864e5) + 'd';
+  const days = ld == null ? null : Math.round((dayKey(Date.now()) - dayKey(ld)) / 864e5);
+  const since = days == null ? '–' : days + 'd';
   const sets = n.exercises.reduce((a, e) => a + e.sets, 0);
   const i = S.routines.indexOf(n);
   let rows = '';
@@ -91,7 +102,7 @@ function vWorkout() {
   if (A.phase === 'start') {
     const st = S.stats[e.name] || {}, w = st.w != null ? st.w : (e.bw ? 0 : 20);
     return progress(A) + head(`Exercise ${A.pos + 1} of ${A.order.length}`, esc(e.name), `<button class="mini" data-a="skip">Skip exercise</button>`) +
-      `<div class="content">${tiles([[e.sets, 'sets'], [e.repMin + '–' + e.repMax, 'reps'], [e.bw ? (w ? '+' + w : 'BW') : w, e.bw ? 'bodyweight' : 'kg']])}${st.flag ? TAG[st.flag] : ''}</div>` +
+      `<div class="content">${tiles([[e.sets, 'sets'], [rng(e), 'reps'], [e.bw ? (w ? '+' + w : 'BW') : w, e.bw ? 'bodyweight' : 'kg']])}${st.flag ? TAG[st.flag] : ''}</div>` +
       pill('Start', 'beginEx');
   }
   if (A.phase === 'log') {
@@ -101,7 +112,7 @@ function vWorkout() {
       `<div class="content">
       <div class="card"><div class="lr"><label for="w">${e.bw ? 'Bodyweight +' : 'Weight'}</label><div class="adj"><button class="sq" aria-label="Less weight" data-a="w" data-d="-1">−</button><span class="val" data-wv>${A.w}<small> kg</small></span><button class="sq" aria-label="More weight" data-a="w" data-d="1">+</button></div></div>
       <input id="w" type="range" data-in="w" min="${lo}" max="${hi}" step="1" value="${A.w}"></div>
-      <div class="card"><div class="lr"><label for="r">Reps · ${e.repMin}–${e.repMax}</label><span class="val" data-rv>${repTxt(A.r, e.repMin, e.repMax)}</span></div>
+      <div class="card"><div class="lr"><label for="r">Reps · ${rng(e)}</label><span class="val" data-rv>${repTxt(A.r, e.repMin, e.repMax)}</span></div>
       <input id="r" type="range" data-in="r" min="${e.repMin - 1}" max="${e.repMax + 1}" step="1" value="${A.r}" aria-valuetext="${repTxt(A.r, e.repMin, e.repMax)} reps">
       <div class="stops" style="grid-template-columns:repeat(${stops.length},minmax(0,1fr))">${stops.map(r => `<span data-stop="${r}"${r === A.r ? ' class="on"' : ''}>${repTxt(r, e.repMin, e.repMax)}</span>`).join('')}</div>
       <div class="note" data-note></div></div></div>` +
@@ -109,9 +120,9 @@ function vWorkout() {
   }
   // rest
   const left = Math.max(0, (A.restEnd - Date.now()) / 1000);
-  const nextTxt = A.set === 0 ? esc(e.name) : `Set ${A.set + 1} · ${e.bw ? wTxt(A.w, true) : A.w + ' kg'} × ${e.repMin}–${e.repMax}`;
+  const nextTxt = A.set === 0 ? esc(e.name) : `Set ${A.set + 1} · ${e.bw ? wTxt(A.w, true) : A.w + ' kg'} × ${rng(e)}`;
   const prevName = A.restLabel || e.name;
-  return progress(A) + head(esc(prevName), 'Rest') +
+  return progress(A) + head(esc(prevName), 'Rest', A.undo ? `<button class="mini" data-a="undo">Undo set</button>` : '') +
     `<div class="content"><div class="ringwrap"><div class="ring"><svg role="img" aria-label="Rest timer" width="260" height="260" viewBox="0 0 260 260"><circle cx="130" cy="130" r="116" fill="none" stroke="var(--card)" stroke-width="24"/><circle data-arc cx="130" cy="130" r="116" fill="none" stroke="var(--lime)" stroke-width="24" stroke-linecap="round" stroke-dasharray="728.85" stroke-dashoffset="${728.85 * (1 - left / A.restDur)}" transform="rotate(-90 130 130)"/></svg><span class="t" data-rest>${mmss(left)}</span></div>
     <div class="next"><span class="small" style="font-size:15px">Next</span><b>${nextTxt}</b></div></div></div>` +
     pill('Skip rest', 'endRest', true);
@@ -125,7 +136,7 @@ function vSummary() {
   const flagged = E.exs.map(x => [x, flagOf(x.sets, x.repMin, x.repMax)]).filter(([, f]) => f);
   return `<div class="prog"><div class="row"><b>${esc(E.name)} · ${clock(E.end - E.start)}</b><span>${sets} / ${sets} sets</span></div><div class="bar"><div style="width:100%"></div></div></div>` +
     head(fdate(E.end), 'Workout done') +
-    `<div class="content">${tiles([[mins, 'minutes'], [sets, 'sets']])}<span class="sect">Next time</span>${flagged.length ? flagged.map(([x, f]) => `<div class="row64"><span class="nm">${esc(x.name)}</span>${TAGS[f]}</div>`).join('') : '<p class="empty">Every set was in range. Keep the same weights.</p>'}</div>` +
+    `<div class="content">${tiles([[mins, 'minutes'], [sets, 'sets']])}<span class="sect">Next time</span>${flagged.length ? flagged.map(([x, f]) => `<div class="row64" style="padding-top:12px;padding-bottom:12px"><span class="nm" style="white-space:normal">${esc(x.name)}</span>${TAGS[f].replace('class="tag', 'style="align-self:center" class="tag')}</div>`).join('') : '<p class="empty">Every set was in range. Keep the same weights.</p>'}</div>` +
     pill('Done', 'go', false, 'data-to="home"');
 }
 
@@ -176,11 +187,17 @@ function vEdit() {
 }
 
 /* ---------- render ---------- */
+let updateReady = false;
+function tryReload() { if (updateReady && view.name === 'home') { updateReady = false; location.reload(); } }
+let screenKey = '', screenAt = 0;
 function render() {
   const V = { home: vHome, workout: vWorkout, summary: vSummary, history: vHistory, menu: vMenu, edit: vEdit };
   if (view.name === 'workout' && !S.active) view = { name: 'home' };
   app.innerHTML = (V[view.name] || vHome)();
   fitTitles();
+  const A0 = S.active, key = view.name + (view.name === 'workout' && A0 ? '/' + A0.phase + '/' + A0.pos + '/' + A0.set : '');
+  if (key !== screenKey) { screenKey = key; screenAt = Date.now(); }
+  tryReload();
   if (view.name === 'workout' && S.active.phase === 'log') updateLog();
   wake(view.name === 'workout');
 }
@@ -205,6 +222,7 @@ function beginEx() {
 }
 function logSet() {
   const A = S.active, e = curEx(), idx = A.order[A.pos];
+  A.undo = { idx, pos: A.pos, set: A.set, w: A.w, r: A.r, prevW: (S.stats[e.name] || {}).w, prevFlag: (S.stats[e.name] || {}).flag };
   (A.logs[idx] = A.logs[idx] || []).push({ w: A.w, r: A.r });
   S.stats[e.name] = Object.assign(S.stats[e.name] || {}, { w: A.w });
   A.set++;
@@ -217,9 +235,16 @@ function logSet() {
   A.restDur = e.rest; A.restEnd = Date.now() + e.rest * 1000; A.phase = 'rest';
   save(); render();
 }
+function undoSet() {
+  const A = S.active, u = A && A.undo; if (!u || A.phase !== 'rest') return;
+  const l = A.logs[u.idx]; if (l) { l.pop(); if (!l.length) delete A.logs[u.idx]; }
+  const st = S.stats[A.exs[u.idx].name]; if (st) { if (u.prevW == null) delete st.w; else st.w = u.prevW; st.flag = u.prevFlag || null; }
+  A.pos = u.pos; A.set = u.set; A.w = u.w; A.r = u.r; A.phase = 'log'; A.restEnd = null; A.undo = null;
+  save(); render();
+}
 function endRest() {
   const A = S.active; if (!A) return;
-  A.phase = A.set === 0 ? 'start' : 'log'; A.restEnd = null; save(); render();
+  A.phase = A.set === 0 ? 'start' : 'log'; A.restEnd = null; A.undo = null; save(); render();
 }
 function skipEx() {
   const A = S.active, idx = A.order[A.pos];
@@ -312,13 +337,14 @@ const actions = {
   delHist: async el => { if (await ask('Delete this workout from history?', 'Delete', true)) { S.history = S.history.filter(h => h.id !== el.dataset.id); save(); render(); } },
   export: () => { const b = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'gym-bro-backup-' + new Date().toISOString().slice(0, 10) + '.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); },
   import: () => { const f = app.querySelector('#importFile'); if (f) f.click(); },
-  beginEx, logSet, endRest, skip: skipEx,
-  finish: async () => { if (await ask('Finish workout now?', 'Finish')) finish(); },
+  beginEx, logSet, endRest, skip: skipEx, undo: undoSet,
+  finish: async () => { const none = !Object.keys(S.active.logs).length; if (await ask(none ? 'Discard this workout?' : 'Finish workout now?', none ? 'Discard' : 'Finish', none)) finish(); },
   w: el => { const A = S.active, e = curEx(); A.w = Math.max(0, A.w + +el.dataset.d); if (!e.bw) A.w = Math.min(500, A.w); save(); render(); }
 };
 app.addEventListener('click', ev => {
   unlockAudio();
   const el = ev.target.closest('[data-a]'); if (!el || el.hasAttribute('data-hold')) return;
+  if (el.classList.contains('pill') && Date.now() - screenAt < 450) return;
   const f = actions[el.dataset.a]; if (f) f(el);
 });
 app.addEventListener('input', ev => {
@@ -334,7 +360,7 @@ app.addEventListener('change', ev => {
   const el = ev.target; if (el.dataset.in === 'w') render();
   if (el.dataset.in !== 'import' || !el.files[0]) return;
   const rd = new FileReader();
-  rd.onload = async () => { let d = null; try { d = JSON.parse(rd.result); if (!Array.isArray(d.routines)) d = null; } catch (e) { d = null; } if (!d) { await ask('That file is not a Gym Bro backup.', 'OK', false, true); return; } if (await ask('Replace everything on this phone with this backup?', 'Restore', true)) { S = d; save(); view = { name: 'home' }; render(); } };
+  rd.onload = async () => { let d = null; try { d = normalise(JSON.parse(rd.result)); if (d) d.active = null; } catch (e) { d = null; } if (!d) { await ask('That file is not a Gym Bro backup.', 'OK', false, true); return; } if (await ask('Replace everything on this phone with this backup?', 'Restore', true)) { S = d; save(); view = { name: 'home' }; render(); } };
   el.value = '';
   rd.readAsText(el.files[0]);
 });
@@ -348,10 +374,17 @@ app.addEventListener('pointerdown', ev => {
   holdT = setTimeout(() => { const id = el.dataset.id; holdEnd(); if (navigator.vibrate) navigator.vibrate(30); startWorkout(id); }, 900);
 });
 ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => app.addEventListener(t, holdEnd));
+app.addEventListener('pointermove', ev => { if (holdEl) { const r = holdEl.getBoundingClientRect(); if (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top - 20 || ev.clientY > r.bottom + 20) holdEnd(); } });
 app.addEventListener('keydown', ev => { const el = ev.target.closest && ev.target.closest('[data-hold]'); if (el && (ev.key === 'Enter' || ev.key === ' ') && !ev.repeat) { ev.preventDefault(); startWorkout(el.dataset.id); } });
 app.addEventListener('contextmenu', ev => { if (ev.target.closest('[data-hold]')) ev.preventDefault(); });
 
 /* ---------- boot ---------- */
 if (S.active && S.active.phase === 'rest' && S.active.restEnd <= Date.now()) { S.active.phase = S.active.set === 0 ? 'start' : 'log'; save(); }
 render();
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+if ('serviceWorker' in navigator) {
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (had) { updateReady = true; tryReload(); } });
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+  }).catch(() => {}));
+}

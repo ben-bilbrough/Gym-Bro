@@ -14,16 +14,20 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <title>Gym Bro</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
 <style>
+@font-face{font-family:Inter;font-weight:500;font-display:swap;src:url(fonts/inter-500.woff2) format('woff2')}
+@font-face{font-family:Inter;font-weight:600;font-display:swap;src:url(fonts/inter-600.woff2) format('woff2')}
+@font-face{font-family:Inter;font-weight:700;font-display:swap;src:url(fonts/inter-700.woff2) format('woff2')}
+@font-face{font-family:'Space Grotesk';font-weight:700;font-display:swap;src:url(fonts/space-grotesk-700.woff2) format('woff2')}
 :root{--bg:#0E0F12;--card:#1A1C21;--ctl:#262930;--line:#3A3E47;--tx:#F2F3F5;--tx2:#9AA0AA;--lime:#C6F432;--limeTx:#C6F432;--onLime:#0E0F12;--orange:#FF9F6B;--sec:#1A1C21;--hold:rgba(14,15,18,.22);--onDanger:#0E0F12}
 @media (prefers-color-scheme: light){:root{--bg:#F4F5F7;--card:#FFFFFF;--ctl:#E4E6EA;--line:#D5D8DE;--tx:#0E0F12;--tx2:#5C626C;--limeTx:#4F6B00;--orange:#B4470F;--sec:#E4E6EA;--onDanger:#FFFFFF}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font-family:Inter,system-ui,-apple-system,sans-serif;font-weight:500;-webkit-user-select:none;user-select:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;overflow:hidden}
 button,input{font-family:inherit;color:inherit}
-button{cursor:pointer;-webkit-touch-callout:none}
+button{cursor:pointer;-webkit-touch-callout:none;touch-action:manipulation}
+[data-hold]{touch-action:none}
+/* status bar text is always white in Home Screen mode, so keep a dark strip behind it in light mode */
+body::before{content:'';position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:#0E0F12;z-index:5}
 input[type=text]{-webkit-user-select:text;user-select:text}
 #app{position:fixed;top:0;right:0;bottom:0;left:0;max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:24px;padding:calc(env(safe-area-inset-top) + 8px) 20px calc(env(safe-area-inset-bottom) + 16px)}
 .top{height:48px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between}
