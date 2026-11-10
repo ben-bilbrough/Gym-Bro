@@ -1,7 +1,7 @@
 'use strict';
 /* Gym Bro — single-user workout tracker. All data stays in this browser (localStorage). */
 const KEY = 'gymbro.v1';
-const APP_VERSION = 8; // keep in step with VERSION in sw.js
+const APP_VERSION = 9; // keep in step with VERSION in sw.js
 const uid = () => Math.random().toString(36).slice(2, 10);
 const mk = (name, sets, repMin, repMax, rest, bw = false) => ({ id: uid(), name, sets, repMin, repMax, rest, bw });
 
@@ -60,6 +60,16 @@ function nextRoutine() {
   if (!S.routines.length) return null;
   const i = S.routines.findIndex(r => r.id === S.lastRoutineId);
   return S.routines[(i + 1) % S.routines.length];
+}
+
+// screen measurements shown in the menu, for diagnosing layout problems
+function diag() {
+  const p = document.createElement('div');
+  p.style.cssText = 'position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+  document.body.appendChild(p); const cs = getComputedStyle(p), t = parseFloat(cs.paddingTop) || 0, b = parseFloat(cs.paddingBottom) || 0; p.remove();
+  const vv = window.visualViewport ? Math.round(window.visualViewport.height) : '-';
+  const r = app.getBoundingClientRect();
+  return `win ${innerWidth}×${innerHeight} · vv ${vv} · scr ${screen.width}×${screen.height} · doc ${document.documentElement.clientHeight} · app ${Math.round(r.top)}–${Math.round(r.bottom)} · safe ${t}/${b} · ${navigator.standalone ? 'home' : 'browser'}`;
 }
 
 /* ---------- layout pieces ---------- */
@@ -172,7 +182,7 @@ function vMenu() {
     <button class="row64" data-a="export"><span class="nm">Back up data</span><span class="meta">Download</span></button>
     <button class="row64" data-a="import"><span class="nm">Restore backup</span><span class="meta">Choose file</span></button>
     <input type="file" accept="application/json,.json" class="sr" id="importFile" data-in="import">
-    <span class="sect" style="text-align:center;padding-bottom:8px">Version ${APP_VERSION}</span></div>` +
+    <span class="sect" style="text-align:center;padding-bottom:8px">Version ${APP_VERSION}<br><span style="font-size:12px">${diag()}</span></span></div>` +
     pill('+ New routine', 'newRoutine');
 }
 
