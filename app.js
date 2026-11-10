@@ -1,6 +1,7 @@
 'use strict';
 /* Gym Bro — single-user workout tracker. All data stays in this browser (localStorage). */
 const KEY = 'gymbro.v1';
+const APP_VERSION = 8; // keep in step with VERSION in sw.js
 const uid = () => Math.random().toString(36).slice(2, 10);
 const mk = (name, sets, repMin, repMax, rest, bw = false) => ({ id: uid(), name, sets, repMin, repMax, rest, bw });
 
@@ -170,7 +171,8 @@ function vMenu() {
     <span class="sect">Your data</span>
     <button class="row64" data-a="export"><span class="nm">Back up data</span><span class="meta">Download</span></button>
     <button class="row64" data-a="import"><span class="nm">Restore backup</span><span class="meta">Choose file</span></button>
-    <input type="file" accept="application/json,.json" class="sr" id="importFile" data-in="import"></div>` +
+    <input type="file" accept="application/json,.json" class="sr" id="importFile" data-in="import">
+    <span class="sect" style="text-align:center;padding-bottom:8px">Version ${APP_VERSION}</span></div>` +
     pill('+ New routine', 'newRoutine');
 }
 

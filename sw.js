@@ -1,5 +1,5 @@
 // Gym Bro offline cache. Bump VERSION when you change files.
-const VERSION = 'gymbro-v7';
+const VERSION = 'gymbro-v8';
 const ASSETS = ['./', './index.html', './app.js', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './fonts/inter-500.woff2', './fonts/inter-600.woff2', './fonts/inter-700.woff2', './fonts/space-grotesk-700.woff2'];
 
 self.addEventListener('install', e => {
