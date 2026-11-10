@@ -24,6 +24,7 @@ function normalise(d) {
   d.routines.forEach(r => { r.id = r.id || uid(); r.name = r.name || 'Routine'; r.exercises = Array.isArray(r.exercises) ? r.exercises : []; r.exercises.forEach(e => { e.id = e.id || uid(); e.name = e.name || 'Exercise'; e.sets = +e.sets || 3; e.repMin = +e.repMin || 8; e.repMax = Math.max(e.repMin, +e.repMax || e.repMin); e.rest = +e.rest || 120; e.bw = !!e.bw; }); });
   if (d.active && (!Array.isArray(d.active.exs) || !Array.isArray(d.active.order) || !d.active.exs[d.active.order[d.active.pos]])) d.active = null;
   if (d.lastSummary === undefined) d.lastSummary = null;
+  d.settings = Object.assign({ iosTimer: false }, d.settings || {});
   return d;
 }
 S = normalise(S) || seed();
@@ -163,6 +164,9 @@ function vMenu() {
   const rows = S.routines.map((r, i) => `<div class="rowx"><button class="row64" data-a="edit" data-id="${r.id}"><span class="nm">${esc(r.name)}</span><span class="meta">${r.exercises.length} exercises</span></button>${i ? `<button class="icon" style="height:64px;width:56px;border-radius:24px" aria-label="Move ${esc(r.name)} up" data-a="rUp" data-i="${i}">${ICON.up}</button>` : ''}</div>`).join('');
   return backTop('home', 'Gym Bro') + head('Rotation order', 'Routines') +
     `<div class="content">${rows || '<p class="empty">No routines yet.</p>'}
+    <span class="sect">Rest timer</span>
+    <button class="row64" data-a="iosTimer" aria-pressed="${S.settings.iosTimer}"><span class="nm">Use iPhone timer</span><span class="meta"${S.settings.iosTimer ? ' style="color:var(--limeTx);font-weight:700"' : ''}>${S.settings.iosTimer ? 'On' : 'Off'}</span></button>
+    <button class="row64" data-a="testTimer"><span class="nm">Test iPhone timer</span><span class="meta">10 seconds</span></button>
     <span class="sect">Your data</span>
     <button class="row64" data-a="export"><span class="nm">Back up data</span><span class="meta">Download</span></button>
     <button class="row64" data-a="import"><span class="nm">Restore backup</span><span class="meta">Choose file</span></button>
@@ -208,6 +212,11 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitles)
 if (document.fonts) document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', fitTitles);
 window.addEventListener('resize', fitTitles);
 
+/* ---------- optional: hand the rest time to the iPhone's own timer via a Shortcut named "Gym Rest" ---------- */
+const SHORTCUT = 'Gym Rest';
+let launch = u => { window.location.href = u; };
+function iosTimer(seconds) { if (S.settings.iosTimer) launch('shortcuts://run-shortcut?name=' + encodeURIComponent(SHORTCUT) + '&input=text&text=' + seconds); }
+
 /* ---------- workout logic ---------- */
 function startWorkout(id) {
   const R = routine(id); if (!R || !R.exercises.length) return;
@@ -233,7 +242,7 @@ function logSet() {
     if (A.pos >= A.order.length) return finish();
   }
   A.restDur = e.rest; A.restEnd = Date.now() + e.rest * 1000; A.phase = 'rest';
-  save(); render();
+  save(); render(); iosTimer(e.rest);
 }
 function undoSet() {
   const A = S.active, u = A && A.undo; if (!u || A.phase !== 'rest') return;
@@ -337,6 +346,8 @@ const actions = {
   delHist: async el => { if (await ask('Delete this workout from history?', 'Delete', true)) { S.history = S.history.filter(h => h.id !== el.dataset.id); save(); render(); } },
   export: () => { const b = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'gym-bro-backup-' + new Date().toISOString().slice(0, 10) + '.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); },
   import: () => { const f = app.querySelector('#importFile'); if (f) f.click(); },
+  iosTimer: () => { S.settings.iosTimer = !S.settings.iosTimer; save(); render(); },
+  testTimer: () => launch('shortcuts://run-shortcut?name=' + encodeURIComponent(SHORTCUT) + '&input=text&text=10'),
   beginEx, logSet, endRest, skip: skipEx, undo: undoSet,
   finish: async () => { const none = !Object.keys(S.active.logs).length; if (await ask(none ? 'Discard this workout?' : 'Finish workout now?', none ? 'Discard' : 'Finish', none)) finish(); },
   w: el => { const A = S.active, e = curEx(); A.w = Math.max(0, A.w + +el.dataset.d); if (!e.bw) A.w = Math.min(500, A.w); save(); render(); }
