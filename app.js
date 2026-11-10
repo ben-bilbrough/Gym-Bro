@@ -281,24 +281,39 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 function editR(fn) { const R = routine(view.id); if (R) { fn(R); save(); } }
 function clampEx(e) { e.sets = Math.min(10, Math.max(1, e.sets)); e.repMin = Math.min(50, Math.max(1, e.repMin)); e.repMax = Math.min(50, Math.max(e.repMin, e.repMax)); }
 
+/* ---------- in-app confirm sheet (replaces browser pop-ups) ---------- */
+function ask(msg, okText, danger = false, infoOnly = false) {
+  return new Promise(res => {
+    const wrap = document.createElement('div');
+    wrap.className = 'sheetwrap';
+    wrap.innerHTML = `<div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="sheetMsg"><p id="sheetMsg">${esc(msg)}</p>
+      <button class="pill${danger ? ' danger' : ''}" data-r="1"><span>${esc(okText)}</span></button>${infoOnly ? '' : '<button class="pill sec" data-r="0"><span>Cancel</span></button>'}</div>`;
+    const done = v => { wrap.classList.remove('show'); setTimeout(() => wrap.remove(), 200); res(v); };
+    wrap.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (b) done(b.dataset.r === '1'); else if (e.target === wrap) done(false); });
+    document.body.appendChild(wrap);
+    requestAnimationFrame(() => wrap.classList.add('show'));
+    const first = wrap.querySelector('[data-r]'); if (first) first.focus();
+  });
+}
+
 /* ---------- events ---------- */
 const actions = {
   go: el => { view = { name: el.dataset.to }; render(); app.scrollTop = 0; },
   edit: el => { view = { name: 'edit', id: el.dataset.id }; render(); },
   newRoutine: () => { const R = { id: uid(), name: 'New routine', exercises: [mk('New exercise', 3, 8, 10, 90)] }; S.routines.push(R); save(); view = { name: 'edit', id: R.id }; render(); const t = app.querySelector('#rn'); if (t) { t.focus(); t.select(); } },
   rUp: el => { const i = +el.dataset.i; const r = S.routines; [r[i - 1], r[i]] = [r[i], r[i - 1]]; save(); render(); },
-  delRoutine: () => { const R = routine(view.id); if (R && confirm(`Delete "${R.name}"?`)) { S.routines = S.routines.filter(x => x !== R); save(); view = { name: 'menu' }; render(); } },
+  delRoutine: async () => { const R = routine(view.id); if (R && await ask(`Delete ${R.name}?`, 'Delete', true)) { S.routines = S.routines.filter(x => x !== R); save(); view = { name: 'menu' }; render(); } },
   addEx: () => { editR(R => R.exercises.push(mk('New exercise', 3, 8, 10, 90))); render(); const c = app.querySelector('.content'); if (c) c.scrollTop = c.scrollHeight; const ins = app.querySelectorAll('.exname'); const last = ins[ins.length - 1]; if (last) { last.focus(); last.select(); } },
-  exDel: el => { const R = routine(view.id), e = R && R.exercises[+el.dataset.i]; if (e && confirm(`Remove "${e.name}"?`)) { editR(R => R.exercises.splice(+el.dataset.i, 1)); render(); } },
+  exDel: async el => { const R = routine(view.id), e = R && R.exercises[+el.dataset.i]; if (e && await ask(`Remove ${e.name}?`, 'Remove', true)) { editR(R => R.exercises.splice(+el.dataset.i, 1)); render(); } },
   exUp: el => { const i = +el.dataset.i; editR(R => { const x = R.exercises; [x[i - 1], x[i]] = [x[i], x[i - 1]]; }); render(); },
   step: el => { editR(R => { const e = R.exercises[+el.dataset.i]; e[el.dataset.f] += +el.dataset.d; if (el.dataset.f === 'repMin' && e.repMax < e.repMin) e.repMax = e.repMin; clampEx(e); }); render(); },
   bw: el => { editR(R => { const e = R.exercises[+el.dataset.i]; e.bw = !e.bw; }); render(); },
   toggle: el => { view.open = view.open === el.dataset.id ? null : el.dataset.id; render(); },
-  delHist: el => { if (confirm('Delete this workout from history?')) { S.history = S.history.filter(h => h.id !== el.dataset.id); save(); render(); } },
+  delHist: async el => { if (await ask('Delete this workout from history?', 'Delete', true)) { S.history = S.history.filter(h => h.id !== el.dataset.id); save(); render(); } },
   export: () => { const b = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'gym-bro-backup-' + new Date().toISOString().slice(0, 10) + '.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); },
   import: () => { const f = app.querySelector('#importFile'); if (f) f.click(); },
   beginEx, logSet, endRest, skip: skipEx,
-  finish: () => { if (confirm('Finish workout now?')) finish(); },
+  finish: async () => { if (await ask('Finish workout now?', 'Finish')) finish(); },
   w: el => { const A = S.active, e = curEx(); A.w = Math.max(0, A.w + +el.dataset.d); if (!e.bw) A.w = Math.min(500, A.w); save(); render(); }
 };
 app.addEventListener('click', ev => {
@@ -319,7 +334,8 @@ app.addEventListener('change', ev => {
   const el = ev.target; if (el.dataset.in === 'w') render();
   if (el.dataset.in !== 'import' || !el.files[0]) return;
   const rd = new FileReader();
-  rd.onload = () => { try { const d = JSON.parse(rd.result); if (!Array.isArray(d.routines)) throw 0; if (confirm('Replace everything on this phone with this backup?')) { S = d; save(); view = { name: 'home' }; render(); } } catch (e) { alert('That file is not a Gym Bro backup.'); } };
+  rd.onload = async () => { let d = null; try { d = JSON.parse(rd.result); if (!Array.isArray(d.routines)) d = null; } catch (e) { d = null; } if (!d) { await ask('That file is not a Gym Bro backup.', 'OK', false, true); return; } if (await ask('Replace everything on this phone with this backup?', 'Restore', true)) { S = d; save(); view = { name: 'home' }; render(); } };
+  el.value = '';
   rd.readAsText(el.files[0]);
 });
 /* press-and-hold to start */
